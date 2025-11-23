@@ -1,0 +1,30 @@
+# Ignore build output
+bin/
+out/
+*.exe
+*.test
+
+# Go module download cache
+pkg/
+
+# Dependency directories
+vendor/
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Env files (do not commit secrets)
+.env
+.env.*
+
+# Test and coverage artifacts
+coverage.*
+*.coverprofile
+*.out

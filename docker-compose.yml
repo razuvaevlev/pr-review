@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pr-review-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER:-pr_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pr_pass}
+      POSTGRES_DB: ${DB_NAME:-pr_review}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pr_user} -d ${DB_NAME:-pr_review}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db_test:
+    image: postgres:15-alpine
+    container_name: pr-review-db-test
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER:-pr_user}
+      POSTGRES_PASSWORD: ${DB_TEST_PASSWORD:-pr_pass}
+      POSTGRES_DB: ${DB_TEST_NAME:-pr_review_test}
+    ports:
+      - "${DB_TEST_PORT:-5433}:5432"
+    volumes:
+      - db_test_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pr_user} -d ${DB_TEST_NAME:-pr_review_test}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: test-runner/Dockerfile
+    container_name: pr-review-test-runner
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${DB_TEST_HOST:-db_test}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-pr_user}
+      DB_PASSWORD: ${DB_TEST_PASSWORD:-pr_pass}
+      DB_NAME: ${DB_TEST_NAME:-pr_review_test}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${DB_USER}:${DB_TEST_PASSWORD}@${DB_TEST_HOST:-db}:5432/${DB_TEST_NAME}?sslmode=disable}
+    depends_on:
+      db_test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/tests_ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: 'no'
+
+  app:
+    build: .
+    container_name: pr-review-app
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-pr_user}
+      DB_PASSWORD: ${DB_PASSWORD:-pr_pass}
+      DB_NAME: ${DB_NAME:-pr_review}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST:-db}:5432/${DB_NAME}?sslmode=disable}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      test-runner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${APP_PORT:-8080}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  cleanup:
+    image: docker:24-cli
+    container_name: pr-review-cleanup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: 'no'
+    command: ["sh","-c","sleep 5 && docker stop pr-review-test-runner pr-review-db-test || true"]
+
+volumes:
+  db_data:
+  db_test_data:

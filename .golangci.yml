@@ -1,0 +1,43 @@
+# golangci-lint config v2
+version: 2
+
+run:
+  timeout: 3m
+  tests: false
+  skip-dirs:
+    - migrations
+    - vendor
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gocyclo
+    - dupl
+    - gosec
+    - funlen
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  gocyclo:
+    min-complexity: 15
+
+issues:
+  max-same-issues: 0
+  exclude-use-default: false
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - funlen
+    - path: migrations
+      linters:
+        - '*'
+    - text: "error return value not checked"
+      linters:
+        - errcheck
+        - errcheck
+
